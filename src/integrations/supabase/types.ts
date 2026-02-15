@@ -14,16 +14,269 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      bookings: {
+        Row: {
+          container_id: string
+          created_at: string
+          id: string
+          payment_id: string | null
+          provider_id: string
+          service_fee: number
+          space_booked: number
+          status: Database["public"]["Enums"]["booking_status"]
+          total_price: number
+          trader_id: string
+          updated_at: string
+        }
+        Insert: {
+          container_id: string
+          created_at?: string
+          id?: string
+          payment_id?: string | null
+          provider_id: string
+          service_fee: number
+          space_booked: number
+          status?: Database["public"]["Enums"]["booking_status"]
+          total_price: number
+          trader_id: string
+          updated_at?: string
+        }
+        Update: {
+          container_id?: string
+          created_at?: string
+          id?: string
+          payment_id?: string | null
+          provider_id?: string
+          service_fee?: number
+          space_booked?: number
+          status?: Database["public"]["Enums"]["booking_status"]
+          total_price?: number
+          trader_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_container_id_fkey"
+            columns: ["container_id"]
+            isOneToOne: false
+            referencedRelation: "containers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      containers: {
+        Row: {
+          arrival_date: string
+          available_capacity: number
+          container_type: string
+          created_at: string
+          currency: string
+          departure_date: string
+          description: string | null
+          destination: string
+          id: string
+          is_active: boolean
+          origin: string
+          price_per_cubic_meter: number
+          provider_id: string
+          total_capacity: number
+          transport_mode: Database["public"]["Enums"]["transport_mode"]
+          updated_at: string
+        }
+        Insert: {
+          arrival_date: string
+          available_capacity: number
+          container_type: string
+          created_at?: string
+          currency?: string
+          departure_date: string
+          description?: string | null
+          destination: string
+          id?: string
+          is_active?: boolean
+          origin: string
+          price_per_cubic_meter: number
+          provider_id: string
+          total_capacity: number
+          transport_mode: Database["public"]["Enums"]["transport_mode"]
+          updated_at?: string
+        }
+        Update: {
+          arrival_date?: string
+          available_capacity?: number
+          container_type?: string
+          created_at?: string
+          currency?: string
+          departure_date?: string
+          description?: string | null
+          destination?: string
+          id?: string
+          is_active?: boolean
+          origin?: string
+          price_per_cubic_meter?: number
+          provider_id?: string
+          total_capacity?: number
+          transport_mode?: Database["public"]["Enums"]["transport_mode"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      conversations: {
+        Row: {
+          created_at: string
+          id: string
+          participant_1: string
+          participant_2: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          participant_1: string
+          participant_2: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          participant_1?: string
+          participant_2?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string
+          id: string
+          read: boolean
+          sender_id: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string
+          id?: string
+          read?: boolean
+          sender_id: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string
+          id?: string
+          read?: boolean
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          company_name: string | null
+          created_at: string
+          description: string | null
+          email: string
+          id: string
+          license_number: string | null
+          name: string
+          phone: string | null
+          provider_status: Database["public"]["Enums"]["provider_status"] | null
+          rating: number | null
+          review_count: number | null
+          transport_modes:
+            | Database["public"]["Enums"]["transport_mode"][]
+            | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          company_name?: string | null
+          created_at?: string
+          description?: string | null
+          email: string
+          id?: string
+          license_number?: string | null
+          name: string
+          phone?: string | null
+          provider_status?:
+            | Database["public"]["Enums"]["provider_status"]
+            | null
+          rating?: number | null
+          review_count?: number | null
+          transport_modes?:
+            | Database["public"]["Enums"]["transport_mode"][]
+            | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          company_name?: string | null
+          created_at?: string
+          description?: string | null
+          email?: string
+          id?: string
+          license_number?: string | null
+          name?: string
+          phone?: string | null
+          provider_status?:
+            | Database["public"]["Enums"]["provider_status"]
+            | null
+          rating?: number | null
+          review_count?: number | null
+          transport_modes?:
+            | Database["public"]["Enums"]["transport_mode"][]
+            | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "trader" | "provider"
+      booking_status: "pending" | "confirmed" | "cancelled" | "completed"
+      provider_status: "pending" | "approved" | "rejected"
+      transport_mode: "rail" | "road" | "ship" | "air"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +403,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "trader", "provider"],
+      booking_status: ["pending", "confirmed", "cancelled", "completed"],
+      provider_status: ["pending", "approved", "rejected"],
+      transport_mode: ["rail", "road", "ship", "air"],
+    },
   },
 } as const

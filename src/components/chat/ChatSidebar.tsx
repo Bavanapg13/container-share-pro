@@ -4,15 +4,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { Send, X } from 'lucide-react';
-
-interface Message {
-  id: string;
-  senderId: string;
-  text: string;
-  timestamp: Date;
-  isMe: boolean;
-}
+import { Send, Loader2 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
 
 interface ChatSidebarProps {
   open: boolean;
@@ -20,46 +14,27 @@ interface ChatSidebarProps {
   providerId: string | null;
 }
 
-// Mock messages
-const mockMessages: Message[] = [
-  {
-    id: '1',
-    senderId: 'provider',
-    text: 'Hello! How can I help you today?',
-    timestamp: new Date(Date.now() - 3600000),
-    isMe: false,
-  },
-  {
-    id: '2',
-    senderId: 'me',
-    text: 'Hi, I\'m interested in booking space in your Shanghai to LA container.',
-    timestamp: new Date(Date.now() - 3500000),
-    isMe: true,
-  },
-  {
-    id: '3',
-    senderId: 'provider',
-    text: 'Great choice! We have 12 m³ available. What type of cargo will you be shipping?',
-    timestamp: new Date(Date.now() - 3400000),
-    isMe: false,
-  },
-];
-
-const providerNames: Record<string, string> = {
-  p1: 'Global Shipping Co.',
-  p2: 'EuroRail Logistics',
-  p3: 'Swift Air Cargo',
-  p4: 'Continental Trucking',
-  p5: 'Pacific Maritime',
-  p6: 'Trans-Asia Railways',
-};
+interface Message {
+  id: string;
+  sender_id: string;
+  content: string;
+  created_at: string;
+}
 
 export function ChatSidebar({ open, onClose, providerId }: ChatSidebarProps) {
-  const [messages, setMessages] = useState<Message[]>(mockMessages);
+  const { user } = useAuth();
+  const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [providerName, setProviderName] = useState('Provider');
+  const [loading, setLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const providerName = providerId ? providerNames[providerId] || 'Provider' : 'Provider';
+  useEffect(() => {
+    if (open && providerId && user) {
+      initConversation();
+    }
+  }, [open, providerId, user]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -67,31 +42,74 @@ export function ChatSidebar({ open, onClose, providerId }: ChatSidebarProps) {
     }
   }, [messages]);
 
-  const handleSend = () => {
-    if (!newMessage.trim()) return;
+  useEffect(() => {
+    if (!conversationId) return;
+    const channel = supabase
+      .channel(`messages-${conversationId}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'messages',
+        filter: `conversation_id=eq.${conversationId}`,
+      }, (payload) => {
+        setMessages(prev => [...prev, payload.new as Message]);
+      })
+      .subscribe();
 
-    const message: Message = {
-      id: Date.now().toString(),
-      senderId: 'me',
-      text: newMessage,
-      timestamp: new Date(),
-      isMe: true,
-    };
+    return () => { supabase.removeChannel(channel); };
+  }, [conversationId]);
 
-    setMessages(prev => [...prev, message]);
+  const initConversation = async () => {
+    if (!user || !providerId) return;
+    setLoading(true);
+
+    // Get provider name
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('company_name, name')
+      .eq('user_id', providerId)
+      .maybeSingle();
+    if (profile) setProviderName(profile.company_name || profile.name);
+
+    // Find or create conversation
+    const { data: existing } = await supabase
+      .from('conversations')
+      .select('id')
+      .or(`and(participant_1.eq.${user.id},participant_2.eq.${providerId}),and(participant_1.eq.${providerId},participant_2.eq.${user.id})`)
+      .maybeSingle();
+
+    let convId = existing?.id;
+    if (!convId) {
+      const { data: newConv } = await supabase
+        .from('conversations')
+        .insert({ participant_1: user.id, participant_2: providerId } as any)
+        .select()
+        .single();
+      convId = newConv?.id;
+    }
+    setConversationId(convId || null);
+
+    // Load messages
+    if (convId) {
+      const { data: msgs } = await supabase
+        .from('messages')
+        .select('*')
+        .eq('conversation_id', convId)
+        .order('created_at', { ascending: true });
+      setMessages((msgs as Message[]) || []);
+    }
+    setLoading(false);
+  };
+
+  const handleSend = async () => {
+    if (!newMessage.trim() || !conversationId || !user) return;
+    const content = newMessage;
     setNewMessage('');
-
-    // Simulate provider response
-    setTimeout(() => {
-      const response: Message = {
-        id: (Date.now() + 1).toString(),
-        senderId: 'provider',
-        text: 'Thanks for your message! I\'ll get back to you shortly.',
-        timestamp: new Date(),
-        isMe: false,
-      };
-      setMessages(prev => [...prev, response]);
-    }, 1500);
+    await supabase.from('messages').insert({
+      conversation_id: conversationId,
+      sender_id: user.id,
+      content,
+    } as any);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -104,7 +122,6 @@ export function ChatSidebar({ open, onClose, providerId }: ChatSidebarProps) {
   return (
     <Sheet open={open} onOpenChange={onClose}>
       <SheetContent className="w-full sm:max-w-md p-0 flex flex-col">
-        {/* Header */}
         <SheetHeader className="p-4 border-b">
           <div className="flex items-center gap-3">
             <Avatar className="w-10 h-10">
@@ -114,49 +131,41 @@ export function ChatSidebar({ open, onClose, providerId }: ChatSidebarProps) {
             </Avatar>
             <div className="flex-1">
               <SheetTitle className="text-left">{providerName}</SheetTitle>
-              <p className="text-xs text-muted-foreground">Usually responds within 1 hour</p>
+              <p className="text-xs text-muted-foreground">Real-time messaging</p>
             </div>
           </div>
         </SheetHeader>
 
-        {/* Messages */}
         <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-          <div className="space-y-4">
-            {messages.map(message => (
-              <div
-                key={message.id}
-                className={`flex ${message.isMe ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-[80%] rounded-2xl px-4 py-2 ${
-                    message.isMe
+          {loading ? (
+            <div className="flex justify-center py-8"><Loader2 className="w-6 h-6 animate-spin text-primary" /></div>
+          ) : (
+            <div className="space-y-4">
+              {messages.map(message => (
+                <div key={message.id} className={`flex ${message.sender_id === user?.id ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[80%] rounded-2xl px-4 py-2 ${
+                    message.sender_id === user?.id
                       ? 'bg-primary text-primary-foreground rounded-br-md'
                       : 'bg-secondary text-foreground rounded-bl-md'
-                  }`}
-                >
-                  <p className="text-sm">{message.text}</p>
-                  <p className={`text-xs mt-1 ${message.isMe ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                    {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </p>
+                  }`}>
+                    <p className="text-sm">{message.content}</p>
+                    <p className={`text-xs mt-1 ${message.sender_id === user?.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      {new Date(message.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+              {messages.length === 0 && !loading && (
+                <p className="text-center text-muted-foreground text-sm py-8">Start a conversation...</p>
+              )}
+            </div>
+          )}
         </ScrollArea>
 
-        {/* Input */}
         <div className="p-4 border-t bg-background">
           <div className="flex gap-2">
-            <Input
-              placeholder="Type a message..."
-              value={newMessage}
-              onChange={e => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              className="flex-1"
-            />
-            <Button onClick={handleSend} size="icon">
-              <Send className="w-4 h-4" />
-            </Button>
+            <Input placeholder="Type a message..." value={newMessage} onChange={e => setNewMessage(e.target.value)} onKeyPress={handleKeyPress} className="flex-1" />
+            <Button onClick={handleSend} size="icon"><Send className="w-4 h-4" /></Button>
           </div>
         </div>
       </SheetContent>
